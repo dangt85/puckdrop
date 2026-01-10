@@ -99,6 +99,8 @@ export function useVapi(options: UseVapiOptions = {}) {
         await vapiRef.current.start(assistantId);
       } else {
         await vapiRef.current.start({
+          name: "Puck Drop Booking Assistant",
+          firstMessage: "Hey there! Welcome to Puck Drop. I can help you book ice time, hockey lessons, or team events. What would you like to do today?",
           model: {
             provider: "openai",
             model: "gpt-4o-mini",
@@ -198,10 +200,10 @@ Be conversational, helpful, and enthusiastic about hockey!`,
             ],
           },
           voice: {
-            provider: "11labs",
-            voiceId: "rachel",
+            provider: "openai",
+            voiceId: "shimmer",
           },
-          serverUrl: `${window.location.origin}/api/vapi/webhook`,
+          serverUrl: process.env.NEXT_PUBLIC_WEBHOOK_URL || `${window.location.origin}/api/vapi/webhook`,
         });
       }
     } catch (error) {
