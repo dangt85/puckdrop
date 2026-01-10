@@ -1,0 +1,235 @@
+"use client";
+
+import { useEffect, useRef, useState, useCallback } from "react";
+import Vapi from "@vapi-ai/web";
+
+export type VapiStatus =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "speaking"
+  | "listening"
+  | "error";
+
+export interface VapiMessage {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: Date;
+}
+
+interface UseVapiOptions {
+  onMessage?: (message: VapiMessage) => void;
+  onError?: (error: Error) => void;
+  onCallEnd?: () => void;
+}
+
+export function useVapi(options: UseVapiOptions = {}) {
+  const vapiRef = useRef<Vapi | null>(null);
+  const [status, setStatus] = useState<VapiStatus>("idle");
+  const [messages, setMessages] = useState<VapiMessage[]>([]);
+  const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(0);
+
+  useEffect(() => {
+    const publicKey = process.env.NEXT_PUBLIC_VAPI_API_KEY;
+
+    if (!publicKey) {
+      console.warn("NEXT_PUBLIC_VAPI_API_KEY is not set");
+      return;
+    }
+
+    const vapi = new Vapi(publicKey);
+    vapiRef.current = vapi;
+
+    vapi.on("call-start", () => {
+      setStatus("connected");
+    });
+
+    vapi.on("call-end", () => {
+      setStatus("idle");
+      options.onCallEnd?.();
+    });
+
+    vapi.on("speech-start", () => {
+      setStatus("speaking");
+    });
+
+    vapi.on("speech-end", () => {
+      setStatus("listening");
+    });
+
+    vapi.on("volume-level", (level: number) => {
+      setVolume(level);
+    });
+
+    vapi.on("message", (message) => {
+      if (message.type === "transcript") {
+        const newMessage: VapiMessage = {
+          role: message.role as "user" | "assistant",
+          content: message.transcript,
+          timestamp: new Date(),
+        };
+
+        if (message.transcriptType === "final") {
+          setMessages((prev) => [...prev, newMessage]);
+          options.onMessage?.(newMessage);
+        }
+      }
+    });
+
+    vapi.on("error", (error) => {
+      console.error("Vapi error:", error);
+      setStatus("error");
+      options.onError?.(error as Error);
+    });
+
+    return () => {
+      vapi.stop();
+    };
+  }, [options]);
+
+  const startCall = useCallback(async (assistantId?: string) => {
+    if (!vapiRef.current) return;
+
+    setStatus("connecting");
+    setMessages([]);
+
+    try {
+      if (assistantId) {
+        await vapiRef.current.start(assistantId);
+      } else {
+        await vapiRef.current.start({
+          model: {
+            provider: "openai",
+            model: "gpt-4o-mini",
+            messages: [
+              {
+                role: "system",
+                content: `You are a friendly and efficient ice rink booking assistant for Puck Drop. Your job is to help customers book ice time, hockey lessons, and team events.
+
+Available facilities:
+- Central Ice Arena (rink-1) at 123 Main St
+- Northside Ice Complex (rink-2) at 456 North Ave
+- Southgate Skating Center (rink-3) at 789 South Blvd
+
+Booking hours are from 6 AM to 10 PM. Each session is 1 hour by default.
+
+When helping customers:
+1. Ask which facility they prefer (or recommend the nearest one)
+2. Ask what date and time they want
+3. Check availability using the checkAvailability function
+4. Get their name and phone number
+5. Confirm the booking using the bookAppointment function
+6. Provide a confirmation summary
+
+Be conversational, helpful, and enthusiastic about hockey!`,
+              },
+            ],
+            functions: [
+              {
+                name: "checkAvailability",
+                description:
+                  "Check available time slots for a specific date and optionally a specific facility",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    date: {
+                      type: "string",
+                      description: "The date to check in YYYY-MM-DD format",
+                    },
+                    facilityId: {
+                      type: "string",
+                      description:
+                        "Optional facility ID (rink-1, rink-2, or rink-3)",
+                    },
+                  },
+                  required: ["date"],
+                },
+              },
+              {
+                name: "bookAppointment",
+                description: "Book an ice time slot for a customer",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    facilityId: {
+                      type: "string",
+                      description: "The facility ID",
+                    },
+                    date: {
+                      type: "string",
+                      description: "The date in YYYY-MM-DD format",
+                    },
+                    timeSlot: {
+                      type: "string",
+                      description: "The time slot in HH:00 format",
+                    },
+                    customerName: {
+                      type: "string",
+                      description: "The customer's name",
+                    },
+                    customerPhone: {
+                      type: "string",
+                      description: "The customer's phone number",
+                    },
+                    bookingType: {
+                      type: "string",
+                      enum: ["ice_time", "lesson", "team_event"],
+                      description: "Type of booking",
+                    },
+                  },
+                  required: [
+                    "facilityId",
+                    "date",
+                    "timeSlot",
+                    "customerName",
+                    "customerPhone",
+                  ],
+                },
+              },
+              {
+                name: "getFacilities",
+                description: "Get the list of available facilities",
+                parameters: {
+                  type: "object",
+                  properties: {},
+                },
+              },
+            ],
+          },
+          voice: {
+            provider: "11labs",
+            voiceId: "rachel",
+          },
+          serverUrl: `${window.location.origin}/api/vapi/webhook`,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to start call:", error);
+      setStatus("error");
+    }
+  }, []);
+
+  const endCall = useCallback(() => {
+    if (!vapiRef.current) return;
+    vapiRef.current.stop();
+    setStatus("idle");
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    if (!vapiRef.current) return;
+    const newMuted = !isMuted;
+    vapiRef.current.setMuted(newMuted);
+    setIsMuted(newMuted);
+  }, [isMuted]);
+
+  return {
+    status,
+    messages,
+    volume,
+    isMuted,
+    startCall,
+    endCall,
+    toggleMute,
+  };
+}

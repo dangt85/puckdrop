@@ -1,0 +1,43 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/puckdrop
+      - VAPI_API_KEY=${VAPI_API_KEY}
+    depends_on:
+      - mongodb
+    networks:
+      - puckdrop-network
+
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - puckdrop-network
+
+  # Optional: MongoDB admin UI
+  mongo-express:
+    image: mongo-express:latest
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongodb
+      - ME_CONFIG_BASICAUTH=false
+    depends_on:
+      - mongodb
+    networks:
+      - puckdrop-network
+
+networks:
+  puckdrop-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
