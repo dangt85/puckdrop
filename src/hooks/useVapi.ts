@@ -100,31 +100,45 @@ export function useVapi(options: UseVapiOptions = {}) {
       } else {
         await vapiRef.current.start({
           name: "Puck Drop Booking Assistant",
-          firstMessage: "Hey there! Welcome to Puck Drop. I can help you book ice time, hockey lessons, or team events. What would you like to do today?",
+          firstMessage: "Hey there! I'm an AI assistant for the Nepean Minor Hockey Association. Would you like to book a practice or a game?",
           model: {
             provider: "openai",
             model: "gpt-4o-mini",
             messages: [
               {
                 role: "system",
-                content: `You are a friendly and efficient ice rink booking assistant for Puck Drop. Your job is to help customers book ice time, hockey lessons, and team events.
+                content: `You are a friendly and efficient ice rink booking assistant for Puck Drop. Your job is to help customers book practices or games near Nepean, Ontario.
 
-Available facilities:
-- Central Ice Arena (rink-1) at 123 Main St
-- Northside Ice Complex (rink-2) at 456 North Ave
-- Southgate Skating Center (rink-3) at 789 South Blvd
+TODAY'S DATE: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+
+When customers mention relative dates like "tomorrow", "next Friday", or "this weekend", calculate the correct date based on today's date above.
 
 Booking hours are from 6 AM to 10 PM. Each session is 1 hour by default.
 
-When helping customers:
-1. Ask which facility they prefer (or recommend the nearest one)
-2. Ask what date and time they want
-3. Check availability using the checkAvailability function
-4. Get their name and phone number
-5. Confirm the booking using the bookAppointment function
-6. Provide a confirmation summary
+BOOKING FLOW - Follow these steps in order:
 
-Be conversational, helpful, and enthusiastic about hockey!`,
+Step 1: When customer wants to book, IMMEDIATELY call getFacilities to get the rink list.
+
+Step 2: After receiving the facilities list, you MUST read them aloud to the customer using their numbers. Say something like: "We have [X] locations available. Number 1 is [name]. Number 2 is [name]. Number 3 is [name]. Which rink would you like?"
+
+Step 3: When customer selects by number (e.g., "number 1", "the first one", "1"), remember that facility's ID for the booking.
+
+Step 4: Ask what date they want to book.
+
+Step 5: Ask what time they prefer.
+
+Step 6: Call checkAvailability to verify the slot is open.
+
+Step 7: Collect their name, phone number, and email.
+
+Step 8: Call bookAppointment to confirm the booking.
+
+Step 9: Give them a confirmation summary.
+
+IMPORTANT RULES:
+- Never say facility IDs aloud (like "rink-1"). Only say the number and name (like "Number 1, Minto Arena").
+- After calling getFacilities, you MUST speak the list of facilities to the customer. Do not stay silent.
+- Be conversational, helpful, and enthusiastic about hockey!`,
               },
             ],
             functions: [
@@ -142,7 +156,7 @@ Be conversational, helpful, and enthusiastic about hockey!`,
                     facilityId: {
                       type: "string",
                       description:
-                        "Optional facility ID (rink-1, rink-2, or rink-3)",
+                        "Optional facility ID (rink one, rink two, rink three...)",
                     },
                   },
                   required: ["date"],
@@ -174,9 +188,13 @@ Be conversational, helpful, and enthusiastic about hockey!`,
                       type: "string",
                       description: "The customer's phone number",
                     },
+                    customerEmail: {
+                      type: "string",
+                      description: "The customer's email address",
+                    },
                     bookingType: {
                       type: "string",
-                      enum: ["ice_time", "lesson", "team_event"],
+                      enum: ["practice", "game"],
                       description: "Type of booking",
                     },
                   },
@@ -186,6 +204,7 @@ Be conversational, helpful, and enthusiastic about hockey!`,
                     "timeSlot",
                     "customerName",
                     "customerPhone",
+                    "customerEmail",
                   ],
                 },
               },

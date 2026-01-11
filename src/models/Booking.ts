@@ -9,7 +9,7 @@ export interface IBooking extends Document {
   customerName: string;
   customerPhone: string;
   customerEmail?: string;
-  bookingType: "ice_time" | "lesson" | "team_event";
+  bookingType: "practice" | "game";
   status: "pending" | "confirmed" | "cancelled";
   notes?: string;
   createdAt: Date;
@@ -52,8 +52,8 @@ const BookingSchema = new Schema<IBooking>(
     },
     bookingType: {
       type: String,
-      enum: ["ice_time", "lesson", "team_event"],
-      default: "ice_time",
+      enum: ["practice", "game"],
+      default: "practice",
     },
     status: {
       type: String,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useVapi, VapiMessage, VapiStatus } from "@/hooks/useVapi";
@@ -13,6 +13,9 @@ interface VoiceBookingProps {
 
 export function VoiceBooking({ assistantId, className }: VoiceBookingProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [showEndCallConfirm, setShowEndCallConfirm] = useState(false);
+  const [closeAfterEnd, setCloseAfterEnd] = useState(false);
+  const transcriptRef = useRef<HTMLDivElement>(null);
   const { status, messages, volume, isMuted, startCall, endCall, toggleMute } =
     useVapi({
       onCallEnd: () => {
@@ -20,20 +23,61 @@ export function VoiceBooking({ assistantId, className }: VoiceBookingProps) {
       },
     });
 
+  useEffect(() => {
+    if (transcriptRef.current) {
+      transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
+    }
+  }, [messages]);
+
   const handleStartCall = async () => {
     setIsOpen(true);
     await startCall(assistantId);
   };
 
   const handleEndCall = () => {
+    setCloseAfterEnd(false);
+    setShowEndCallConfirm(true);
+  };
+
+  const confirmEndCall = () => {
     endCall();
+    setShowEndCallConfirm(false);
+    if (closeAfterEnd) {
+      setIsOpen(false);
+      setCloseAfterEnd(false);
+    }
+  };
+
+  const cancelEndCall = () => {
+    setShowEndCallConfirm(false);
+    setCloseAfterEnd(false);
   };
 
   const handleClose = () => {
     if (status !== "idle") {
-      endCall();
+      setCloseAfterEnd(true);
+      setShowEndCallConfirm(true);
+    } else {
+      setIsOpen(false);
     }
-    setIsOpen(false);
+  };
+
+  const downloadTranscript = () => {
+    const transcript = messages
+      .map((msg) => {
+        const time = msg.timestamp.toLocaleTimeString();
+        const role = msg.role === "user" ? "You" : "Assistant";
+        return `[${time}] ${role}: ${msg.content}`;
+      })
+      .join("\n\n");
+
+    const blob = new Blob([transcript], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `puckdrop-transcript-${new Date().toISOString().split("T")[0]}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -64,7 +108,7 @@ export function VoiceBooking({ assistantId, className }: VoiceBookingProps) {
             <CardContent className="space-y-6">
               <StatusIndicator status={status} volume={volume} />
 
-              <div className="h-64 overflow-y-auto rounded-lg bg-muted/50 p-4">
+              <div ref={transcriptRef} className="h-64 overflow-y-auto rounded-lg bg-muted/50 p-4">
                 {messages.length === 0 ? (
                   <p className="text-center text-sm text-muted-foreground">
                     {status === "idle"
@@ -128,6 +172,39 @@ export function VoiceBooking({ assistantId, className }: VoiceBookingProps) {
                         ? "Listening to you..."
                         : ""}
               </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {showEndCallConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-sm animate-in fade-in zoom-in duration-200">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg">End Call?</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Are you sure you want to end this call?
+              </p>
+              {messages.length > 0 && (
+                <Button
+                  variant="secondary"
+                  className="w-full"
+                  onClick={downloadTranscript}
+                >
+                  <DownloadIcon className="mr-2 h-4 w-4" />
+                  Download Transcript
+                </Button>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={cancelEndCall}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={confirmEndCall}>
+                  End Call
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -287,6 +364,25 @@ function CloseIcon({ className }: { className?: string }) {
     >
       <line x1="18" x2="6" y1="6" y2="18" />
       <line x1="6" x2="18" y1="6" y2="18" />
+    </svg>
+  );
+}
+
+function DownloadIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" x2="12" y1="15" y2="3" />
     </svg>
   );
 }
