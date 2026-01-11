@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
       customerName,
       customerPhone,
       customerEmail,
-      bookingType: bookingType || "ice_time",
+      bookingType: bookingType || "practice",
       status: "confirmed",
       notes,
     });
